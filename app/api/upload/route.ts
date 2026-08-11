@@ -1,4 +1,4 @@
-import { put } from "@vercel/blob";
+import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
 
 import { requireUserApi } from "@/lib/auth";
 import { slugify } from "@/lib/utils";
@@ -14,19 +14,37 @@ const ALLOWED = new Set([
   "image/gif",
 ]);
 
+function configured(): boolean {
+  return Boolean(
+    process.env.CLOUDINARY_CLOUD_NAME &&
+      process.env.CLOUDINARY_API_KEY &&
+      process.env.CLOUDINARY_API_SECRET,
+  );
+}
+
 export async function POST(request: Request) {
   const auth = await requireUserApi("writer");
   if ("error" in auth) return auth.error;
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  if (!configured()) {
     return Response.json(
       {
         error:
-          "Image storage is not configured. Set BLOB_READ_WRITE_TOKEN in your environment.",
+          "Image storage is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET.",
       },
       { status: 503 },
     );
   }
+
+  // Configure per request rather than at module scope: the route is dynamic,
+  // and reading env lazily keeps a missing variable from throwing during
+  // Next.js's build-time module evaluation.
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true,
+  });
 
   const formData = await request.formData();
   const file = formData.get("file");
@@ -47,20 +65,42 @@ export async function POST(request: Request) {
     );
   }
 
-  // Never trust the client-supplied filename as a path.
-  const extension = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+  // Never trust the client-supplied filename as a path. Cloudinary derives the
+  // public_id from this, so it becomes part of a public URL.
   const base = slugify(file.name.replace(/\.[^.]+$/, "")) || "image";
-  const key = `articles/${Date.now()}-${base}.${extension}`;
 
   try {
-    const blob = await put(key, file, {
-      access: "public",
-      contentType: file.type,
-      addRandomSuffix: true,
+    const bytes = Buffer.from(await file.arrayBuffer());
+
+    const result = await new Promise<UploadApiResponse>((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "finetori/articles",
+          public_id: `${Date.now()}-${base}`,
+          resource_type: "image",
+          overwrite: false,
+          // Strip camera EXIF, which can carry the photographer's location.
+          invalidate: true,
+        },
+        (error, uploadResult) => {
+          if (error) reject(error);
+          else if (!uploadResult) reject(new Error("Empty upload response."));
+          else resolve(uploadResult);
+        },
+      );
+      stream.end(bytes);
     });
-    return Response.json({ url: blob.url });
+
+    // Store the plain delivery URL. Format, quality and width are applied at
+    // render time by the loader in lib/cloudinary-loader.ts, so one stored URL
+    // serves every breakpoint rather than freezing a single size here.
+    return Response.json({
+      url: result.secure_url,
+      width: result.width,
+      height: result.height,
+    });
   } catch (error) {
-    console.error("upload failed", error);
+    console.error("cloudinary upload failed", error);
     return Response.json({ error: "Upload failed." }, { status: 500 });
   }
 }

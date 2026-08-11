@@ -32,7 +32,9 @@ the first login.**
 | `AUTH_SECRET` | Signing session cookies | `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
 | `CRON_SECRET` | Protecting `/api/cron/*` | Same generator. Routes fail closed if unset |
 | `ANTHROPIC_API_KEY` | Article generation | Only needed to run ingestion |
-| `BLOB_READ_WRITE_TOKEN` | Image uploads | Vercel dashboard → Storage → Blob |
+| `CLOUDINARY_CLOUD_NAME` | Image uploads | Cloudinary dashboard → Product Environment Credentials |
+| `CLOUDINARY_API_KEY` | Image uploads | Same place |
+| `CLOUDINARY_API_SECRET` | Image uploads | Same place — server-side only, never `NEXT_PUBLIC_` |
 | `NEXT_PUBLIC_SITE_URL` | Canonical URLs, sitemaps | No trailing slash |
 | `NEXT_PUBLIC_ADSENSE_CLIENT_ID` | Serving ads | Leave empty until approved; slots render as reserved space |
 
@@ -294,8 +296,8 @@ hand from the Actions tab — useful for the first end-to-end check.
    Next.js app).
 2. Set every variable from the table above in the host's project settings, with
    `NEXT_PUBLIC_SITE_URL` set to the real domain.
-3. Provide blob storage and set `BLOB_READ_WRITE_TOKEN`. **A cover image is
-   required to publish**, so nothing goes live until this works.
+3. Set the three `CLOUDINARY_*` variables. **A cover image is required to
+   publish**, so nothing goes live until uploads work.
 4. Configure `SITE_URL` and `CRON_SECRET` on the repository (see Scheduling).
 5. Run `npm run db:migrate` against the production database.
 6. **Verify on a preview URL before touching DNS.** finetori.com stays on
