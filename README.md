@@ -104,6 +104,34 @@ defects beyond that and currently fails every run — its error is visible in
 **Admin → News sources**, and the other seven feeds are unaffected. Disable it
 there if the noise bothers you.
 
+### Structured-output schema constraints
+
+`ARTICLE_SCHEMA` in `lib/ingest/generate.ts` deliberately carries no
+`minItems` / `maxItems` / length constraints. Structured outputs reject array
+and string constraints outright — the API returns
+`400 output_config.format.schema: For 'array' type, property 'maxItems' is not
+supported`. The SDK's Zod helper strips these and re-validates client-side; we
+pass a raw JSON schema, so the counts live in the prompt and are enforced in
+`normalizeArticle()`. **Don't add constraints back to that schema** — it fails
+at request time, not at build time.
+
+### What a draft actually costs
+
+Measured on a real run (Sonnet 5, one article synthesised from two outlets):
+
+| | tokens |
+|---|---|
+| Input, uncached | 497 |
+| Input, cached system prompt | 1,452 |
+| Output | 661 |
+
+At one draft/day the 5-minute cache TTL always expires between runs, so every
+call is cold: ~1,950 input + ~660 output. On Sonnet 5 that is about **$0.01 per
+draft — roughly 30¢/month**, or ~50¢ once the introductory pricing ends on
+2026-08-31. Opus 5 is about 4× that and still under $2/month at this volume.
+
+Caching only starts paying once several drafts are generated inside one run.
+
 ### Switching models
 
 `ANTHROPIC_MODEL` selects the writer. `claude-opus-5` is the default;
