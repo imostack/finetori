@@ -75,26 +75,58 @@ export async function destroySession(): Promise<void> {
  * Read and verify the current session. Returns null when there is no valid
  * session — callers decide whether that is an error.
  */
+/**
+ * Resolves the signed-in user, or null.
+ *
+ * The cookie proves who signed in; the database decides whether that account
+ * is still allowed in and at what role. Trusting the token's own claims meant
+ * deactivating a user did not sign them out and a role change did not apply
+ * until their token happened to expire — the account stayed live for the rest
+ * of the session's lifetime, which is exactly the window that matters when
+ * revoking access.
+ *
+ * Costs one indexed lookup per admin request. Only admin paths reach this;
+ * the public site never calls it, and proxy.ts deliberately does not import
+ * the database layer.
+ */
 export async function getSession(): Promise<SessionUser | null> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
+  let subject: string;
   try {
     const { payload } = await jwtVerify(token, secretKey(), {
       algorithms: ["HS256"],
     });
     if (!payload.sub) return null;
-    return {
-      id: payload.sub,
-      email: String(payload.email ?? ""),
-      name: String(payload.name ?? ""),
-      role: payload.role as UserRole,
-    };
+    subject = payload.sub;
   } catch {
     // Expired, tampered with, or signed by a rotated secret.
     return null;
   }
+
+  const [account] = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      role: users.role,
+      isActive: users.isActive,
+    })
+    .from(users)
+    .where(eq(users.id, subject))
+    .limit(1);
+
+  // Deleted or deactivated since the token was issued.
+  if (!account || !account.isActive) return null;
+
+  return {
+    id: account.id,
+    email: account.email,
+    name: account.name,
+    role: account.role,
+  };
 }
 
 /* --------------------------------------------------------- authorization */

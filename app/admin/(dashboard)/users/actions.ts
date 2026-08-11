@@ -76,6 +76,56 @@ export async function createUserAction(
   return { message: `${name} can now sign in.` };
 }
 
+export type ResetState = { error?: string; message?: string };
+
+/**
+ * Admin-initiated password reset.
+ *
+ * There is no email delivery in this app, so a forgotten password would
+ * otherwise be unrecoverable — this is the only route back in. The new
+ * password is shown once to the admin, who passes it on out of band.
+ */
+export async function resetPasswordAction(
+  _prev: ResetState,
+  formData: FormData,
+): Promise<ResetState> {
+  const actor = await requireUser("admin");
+
+  const id = String(formData.get("id") ?? "");
+  const password = String(formData.get("password") ?? "");
+
+  if (!id) return { error: "No user selected." };
+  if (password.length < 10) {
+    return { error: "The new password must be at least 10 characters." };
+  }
+
+  const [target] = await db
+    .select({ name: users.name, email: users.email })
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1);
+
+  if (!target) return { error: "That user no longer exists." };
+
+  await db
+    .update(users)
+    .set({ passwordHash: await hashPassword(password) })
+    .where(eq(users.id, id));
+
+  await db.insert(auditLog).values({
+    userId: actor.id,
+    action: "reset_password",
+    entity: "user",
+    entityId: id,
+    meta: { email: target.email },
+  });
+
+  revalidatePath("/admin/users");
+  return {
+    message: `Password reset for ${target.name}. Send it to them directly — it is not shown again.`,
+  };
+}
+
 export async function toggleUserActiveAction(
   formData: FormData,
 ): Promise<void> {

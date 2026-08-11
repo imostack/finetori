@@ -5,6 +5,7 @@ import { articles, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { formatDate } from "@/lib/utils";
 import { UserForm } from "./user-form";
+import { ResetPassword } from "./reset-password";
 import { toggleUserActiveAction } from "./actions";
 
 export const metadata = { title: "Team" };
@@ -81,24 +82,31 @@ export default async function UsersPage() {
                   {formatDate(row.createdAt)}
                 </td>
                 <td className="px-4 py-2.5">
-                  {row.id === actor.id ? (
-                    <span className="text-xs text-neutral-400">—</span>
-                  ) : (
-                    <form action={toggleUserActiveAction}>
-                      <input type="hidden" name="id" value={row.id} />
-                      <input
-                        type="hidden"
-                        name="isActive"
-                        value={String(row.isActive)}
-                      />
-                      <button
-                        type="submit"
-                        className="rounded border border-neutral-300 px-2.5 py-1 text-xs font-medium transition hover:border-neutral-900"
-                      >
-                        {row.isActive ? "Deactivate" : "Reactivate"}
-                      </button>
-                    </form>
-                  )}
+                  <div className="flex flex-col items-start gap-1.5">
+                    {row.id === actor.id ? (
+                      <span className="text-xs text-neutral-400">
+                        Change your own password under Your account
+                      </span>
+                    ) : (
+                      <>
+                        <form action={toggleUserActiveAction}>
+                          <input type="hidden" name="id" value={row.id} />
+                          <input
+                            type="hidden"
+                            name="isActive"
+                            value={String(row.isActive)}
+                          />
+                          <button
+                            type="submit"
+                            className="rounded border border-neutral-300 px-2.5 py-1 text-xs font-medium transition hover:border-neutral-900"
+                          >
+                            {row.isActive ? "Deactivate" : "Reactivate"}
+                          </button>
+                        </form>
+                        <ResetPassword userId={row.id} />
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

@@ -54,6 +54,12 @@ export default async function AdminLayout({
             >
               View site ↗
             </Link>
+            <Link
+              href="/admin/account"
+              className="mt-1 block rounded-md px-3 py-2 text-sm text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
+            >
+              Your account
+            </Link>
             <div className="mt-2 px-3">
               <p className="truncate text-sm font-medium">{user.name}</p>
               <p className="text-xs capitalize text-neutral-500">{user.role}</p>
