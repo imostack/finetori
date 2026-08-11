@@ -1,0 +1,79 @@
+name: Ingest news
+
+# Pulls the configured RSS feeds, clusters the day's stories, and drafts the
+# top-scoring one into the review queue. Nothing is published — drafts land as
+# `in_review` for an editor.
+#
+# 05:00 UTC is 06:00 WAT: late enough to catch the overnight cycle, early
+# enough that a draft is waiting at the start of the working day.
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch: # lets you trigger a run by hand from the Actions tab
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false # never interrupt a run mid-generation
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger ingestion
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SITE_URL:-}" ]; then
+            echo "::error::SITE_URL repository variable is not set."
+            exit 1
+          fi
+
+          # --max-time guards against a hung feed holding the runner open.
+          # Feed fetching plus one generation runs ~90s; 300s is generous.
+          status=$(curl -sS -X POST "${SITE_URL%/}/api/cron/ingest" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            --max-time 300 \
+            -o response.json \
+            -w "%{http_code}")
+
+          echo "HTTP $status"
+          cat response.json
+          echo
+
+          if [ "$status" != "200" ]; then
+            echo "::error::Ingestion failed with HTTP $status"
+            exit 1
+          fi
+
+          # Surface the run summary in the Actions UI so a failing pipeline is
+          # visible without opening the logs.
+          {
+            echo "### Ingestion run"
+            echo
+            python3 -c "
+          import json
+          r = json.load(open('response.json'))
+          print(f\"- Drafts created: **{r['draftsCreated']}**\")
+          print(f\"- Feeds polled: {r['sources']}, items fetched: {r['itemsFetched']}, new: {r['itemsNew']}\")
+          print(f\"- Clusters created: {r['clustersCreated']}\")
+          print(f\"- Duration: {r['durationMs']/1000:.1f}s\")
+          u = r.get('usage', {})
+          print(f\"- Tokens: {u.get('inputTokens',0)} in / {u.get('outputTokens',0)} out / {u.get('cacheReadTokens',0)} cached\")
+          if r['failures']:
+              print()
+              print('**Failures**')
+              for f in r['failures']:
+                  print(f\"- \`{f['cluster'][:70]}\` — {f['reason'][:160]}\")
+          "
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # A run that fetches feeds but drafts nothing is not an error — there
+          # may be no story above the scoring threshold — but it is worth
+          # noticing if it repeats.
+          if grep -q '"draftsCreated":0' response.json; then
+            echo "::warning::No drafts created this run."
+          fi

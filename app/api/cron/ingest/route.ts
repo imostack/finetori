@@ -37,6 +37,7 @@ async function handle(request: Request) {
   }
 }
 
-// Vercel Cron issues a GET; POST is here for manual triggering from a shell.
+// Both verbs are accepted so any scheduler works: the GitHub Actions workflow
+// and shell triggers POST, while most hosted cron services only issue a GET.
 export const GET = handle;
 export const POST = handle;

@@ -54,8 +54,8 @@ export default async function QueuePage(props: PageProps<"/admin/queue">) {
         <div className="rounded-lg border border-dashed border-neutral-300 bg-white py-16 text-center">
           <p className="font-medium">The queue is empty.</p>
           <p className="mt-1 text-sm text-neutral-500">
-            The ingestion job runs hourly. New drafts will appear here as
-            stories break.
+            The ingestion job runs each morning. New drafts appear here for
+            review before anything goes live.
           </p>
         </div>
       ) : (

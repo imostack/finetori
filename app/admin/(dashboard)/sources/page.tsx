@@ -34,7 +34,7 @@ export default async function SourcesPage() {
       <header>
         <h1 className="text-2xl font-bold">News sources</h1>
         <p className="mt-1 text-sm text-neutral-600">
-          The feeds the hourly ingestion job reads. Disable a source to stop
+          The feeds the daily ingestion job reads. Disable a source to stop
           pulling from it without losing its history.
         </p>
       </header>

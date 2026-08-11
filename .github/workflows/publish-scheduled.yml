@@ -1,0 +1,50 @@
+name: Publish scheduled articles
+
+# Flips any article whose `scheduledFor` has passed from `scheduled` to
+# `published`. Pure database work — no model calls, so this job costs nothing
+# beyond GitHub Actions minutes.
+#
+# NOTE ON MINUTES: GitHub rounds every job up to a whole minute, so this
+# schedule bills ~2,880 minutes/month against the 2,000 included with a private
+# repo. See "Scheduling" in the README — change to */30 to stay inside the free
+# tier, or make the repository public for unlimited minutes.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-scheduled
+  cancel-in-progress: true # a superseded run has nothing unique to finish
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish anything due
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SITE_URL:-}" ]; then
+            echo "::error::SITE_URL repository variable is not set."
+            exit 1
+          fi
+
+          status=$(curl -sS -X POST "${SITE_URL%/}/api/cron/publish-scheduled" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            --max-time 60 \
+            -o response.json \
+            -w "%{http_code}")
+
+          echo "HTTP $status"
+          cat response.json
+          echo
+
+          if [ "$status" != "200" ]; then
+            echo "::error::Scheduled publish failed with HTTP $status"
+            exit 1
+          fi

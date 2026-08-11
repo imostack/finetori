@@ -40,7 +40,8 @@ the first login.**
 
 ## How the news pipeline works
 
-`/api/cron/ingest` runs hourly on Vercel Cron. One pass:
+`/api/cron/ingest` runs once daily, driven by GitHub Actions (see
+**Scheduling** below). One pass:
 
 1. **Fetch** — every enabled feed in `sources`, in parallel. A failing feed
    records its error and is skipped; it never aborts the run.
@@ -241,18 +242,66 @@ called inside each page, action, and route handler next to the data access.
 
 ---
 
+## Scheduling
+
+Both scheduled jobs are **plain authenticated POST endpoints**, not a platform
+feature — anything that can make an HTTP request can drive them. Nothing in the
+app is tied to a particular host's scheduler.
+
+```bash
+curl -X POST "$SITE_URL/api/cron/ingest"             -H "Authorization: Bearer $CRON_SECRET"
+curl -X POST "$SITE_URL/api/cron/publish-scheduled"  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+This repo drives them from **GitHub Actions** (`.github/workflows/`), which
+keeps scheduling independent of where the app is hosted. Two things must be
+configured on the repository:
+
+| Where | Name | Value |
+|---|---|---|
+| Settings → Secrets and variables → Actions → **Variables** | `SITE_URL` | The deployed base URL, no trailing slash |
+| Settings → Secrets and variables → Actions → **Secrets** | `CRON_SECRET` | Same value as the app's `CRON_SECRET` env var |
+
+Both workflows have `workflow_dispatch` enabled, so you can trigger either by
+hand from the Actions tab — useful for the first end-to-end check.
+
+### Three things to know about GitHub Actions schedules
+
+- **Billing rounds up to the whole minute.** The 15-minute publish job is
+  ~2,880 runs/month, so it bills ~2,880 minutes against the **2,000** included
+  with a private repo — roughly **$7/month** in overage, which dwarfs the ~30¢
+  of model spend. Change the schedule to `*/30` (≈1,440 min, inside the free
+  tier) or make the repository public (unlimited minutes) to avoid it.
+- **Schedules drift.** GitHub delays scheduled runs under load, commonly by
+  5–15 minutes. Fine for a daily ingest; it means a scheduled publish can be
+  late by more than its interval.
+- **They switch themselves off.** GitHub disables scheduled workflows after
+  **60 days with no repository activity**, silently. On a quiet repo the site
+  just stops ingesting. Re-enable from the Actions tab, or push occasionally.
+
+### Alternatives
+
+| Host | How |
+|---|---|
+| VPS / cPanel | Two `crontab` lines running the curl commands above |
+| Vercel **Pro** | Re-add a `crons` array to `vercel.json` |
+| Vercel **Hobby** | Daily crons only — a schedule more frequent than once a day **fails the deployment**, so the 15-minute job cannot live there |
+| External service | cron-job.org, EasyCron — no infrastructure, but `CRON_SECRET` lives in a third-party dashboard |
+
 ## Deploying
 
-1. Push to GitHub, import into Vercel.
-2. Set every variable from the table above in Vercel's project settings, with
+1. Push to GitHub, then import into your host (Vercel, or anywhere that runs a
+   Next.js app).
+2. Set every variable from the table above in the host's project settings, with
    `NEXT_PUBLIC_SITE_URL` set to the real domain.
-3. Create a Vercel Blob store; `BLOB_READ_WRITE_TOKEN` is injected automatically.
-4. `vercel.json` already registers both cron jobs — Vercel sends `CRON_SECRET`
-   as a Bearer token.
+3. Provide blob storage and set `BLOB_READ_WRITE_TOKEN`. **A cover image is
+   required to publish**, so nothing goes live until this works.
+4. Configure `SITE_URL` and `CRON_SECRET` on the repository (see Scheduling).
 5. Run `npm run db:migrate` against the production database.
-6. **Verify on the Vercel preview URL before touching DNS.** finetori.com stays
-   on WordPress until then.
-7. Cut DNS over. The four "Hello World" WordPress posts need no migration.
+6. **Verify on a preview URL before touching DNS.** finetori.com stays on
+   WordPress until then.
+7. Trigger both workflows by hand from the Actions tab and confirm they pass.
+8. Cut DNS over. The four "Hello World" WordPress posts need no migration.
 
 ### After launch
 
