@@ -27,9 +27,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Not-yet-configured is not a failure — skip quietly until the app is
+          # deployed and SITE_URL is set.
           if [ -z "${SITE_URL:-}" ]; then
-            echo "::error::SITE_URL repository variable is not set."
-            exit 1
+            echo "::warning::SITE_URL is not set — skipping. Set it under Settings → Secrets and variables → Actions → Variables."
+            exit 0
           fi
 
           # --max-time guards against a hung feed holding the runner open.

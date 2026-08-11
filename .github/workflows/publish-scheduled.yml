@@ -29,9 +29,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Not-yet-configured is not a failure. Until the app is deployed and
+          # SITE_URL is set, skip quietly rather than emailing a failure every
+          # 15 minutes.
           if [ -z "${SITE_URL:-}" ]; then
-            echo "::error::SITE_URL repository variable is not set."
-            exit 1
+            echo "::warning::SITE_URL is not set — skipping. Set it under Settings → Secrets and variables → Actions → Variables."
+            exit 0
           fi
 
           status=$(curl -sS -X POST "${SITE_URL%/}/api/cron/publish-scheduled" \
