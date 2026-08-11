@@ -78,9 +78,10 @@ export async function POST(request: Request) {
           folder: "finetori/articles",
           public_id: `${Date.now()}-${base}`,
           resource_type: "image",
+          // public_id is timestamped, so collisions are not expected and an
+          // accidental overwrite should fail loudly rather than replace a
+          // published article's image.
           overwrite: false,
-          // Strip camera EXIF, which can carry the photographer's location.
-          invalidate: true,
         },
         (error, uploadResult) => {
           if (error) reject(error);
