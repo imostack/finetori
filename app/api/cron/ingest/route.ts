@@ -1,3 +1,4 @@
+import { isAgentPaused } from "@/lib/agent-status";
 import { runIngestion } from "@/lib/ingest/run";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,11 @@ function isAuthorized(request: Request): boolean {
 async function handle(request: Request) {
   if (!isAuthorized(request)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (isAgentPaused()) {
+    console.log("[ingest] skipped: agent paused");
+    return Response.json({ paused: true });
   }
 
   const url = new URL(request.url);

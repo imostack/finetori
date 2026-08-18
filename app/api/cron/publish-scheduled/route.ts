@@ -2,6 +2,7 @@ import { and, eq, isNotNull, lte } from "drizzle-orm";
 
 import { db } from "@/db";
 import { articles } from "@/db/schema";
+import { isAgentPaused } from "@/lib/agent-status";
 import { publishArticle } from "@/lib/publish";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,11 @@ async function handle(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (isAgentPaused()) {
+    console.log("[publish-scheduled] skipped: agent paused");
+    return Response.json({ paused: true });
   }
 
   const due = await db
